@@ -1,0 +1,10 @@
+org: konflux-ci
+repos:
+  - devlake
+  - pipeline-service
+  - build-service
+  - integration-service
+  - release-service
+  - dora-metrics
+  - mintmaker
+  - build-definitions
