@@ -4,7 +4,7 @@ import shutil
 import subprocess
 import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Tuple
 
@@ -12,45 +12,21 @@ import requests
 import yaml
 
 
-def load_demo_repos(repos_yaml: Path) -> Tuple[str, List[str]]:
-    """Load org and repo list from repos.yaml."""
-    with open(repos_yaml) as f:
+def load_repos_from_yaml(path: Path) -> Tuple[str, List[str]]:
+    """Load org and repo list from a YAML file with 'org' and 'repos' keys."""
+    with open(path) as f:
         data = yaml.safe_load(f)
     return data["org"], data["repos"]
 
 
-def load_repos_from_file(path: Path) -> Tuple[str, List[str]]:
-    """
-    Load repos from a file. Format: one entry per line.
-    Lines starting with '#' are comments.
-    Lines can be 'org/repo' or just 'repo'.
-    Returns (org, [repo_names]).
-    """
-    lines = [
-        l.strip()
-        for l in path.read_text().splitlines()
-        if l.strip() and not l.strip().startswith("#")
-    ]
+# Alias used by assess.py --from-file
+load_repos_from_file = load_repos_from_yaml
 
-    if not lines:
-        return "", []
-
-    # Detect if lines are 'org/repo' format
-    if "/" in lines[0]:
-        org = lines[0].split("/", 1)[0]
-        repos = [l.split("/", 1)[1] if "/" in l else l for l in lines]
-    else:
-        # Plain repo names — org comes from repos.yaml
-        yaml_path = Path(__file__).parent / "repos.yaml"
-        with open(yaml_path) as f:
-            data = yaml.safe_load(f)
-        org = data["org"]
-        repos = lines
-
-    return org, repos
+# Backwards-compatible alias
+load_demo_repos = load_repos_from_yaml
 
 
-def discover_prod_repos(org: str) -> List[str]:
+def discover_org_repos(org: str) -> List[str]:
     """Discover all public repos in a GitHub org via the API."""
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
     headers = {"Accept": "application/vnd.github.v3+json"}
@@ -75,6 +51,10 @@ def discover_prod_repos(org: str) -> List[str]:
 
     print(f"Discovered {len(repos)} public repos in {org}")
     return repos
+
+
+# Backwards-compatible alias
+discover_prod_repos = discover_org_repos
 
 
 def assess_repo(org: str, repo: str, output_dir: Path) -> str:
@@ -196,7 +176,7 @@ def run_batch(
 
 def commit_results(repo_root: Path, org: str, repos: List[str]) -> None:
     """Stage and commit all new assessment files in one commit."""
-    date_str = datetime.utcnow().strftime("%Y-%m-%d")
+    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     repo_list = ", ".join(repos[:5])
     if len(repos) > 5:
         repo_list += f" (+{len(repos) - 5} more)"
@@ -221,7 +201,8 @@ def commit_results(repo_root: Path, org: str, repos: List[str]) -> None:
 
 
 def write_failed_repos(path: Path, org: str, repos: List[str]) -> None:
-    """Write failed repo names to a file for re-running."""
-    lines = [f"# Failed repos from {datetime.utcnow().isoformat()}"]
-    lines += [f"{org}/{r}" for r in repos]
-    path.write_text("\n".join(lines) + "\n")
+    """Write failed repos to a YAML file with the same structure as repos.yaml."""
+    data = {"org": org, "repos": repos}
+    with open(path, "w") as f:
+        f.write(f"# Failed repos from {datetime.now(timezone.utc).isoformat()}\n")
+        yaml.dump(data, f, default_flow_style=False)

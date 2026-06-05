@@ -3,7 +3,15 @@ name: Assess repos (scheduled)
 on:
   schedule:
     - cron: '0 6 * * 1'  # Every Monday at 06:00 UTC
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      org:
+        description: 'GitHub org to assess (overrides repos.yaml)'
+        required: false
+      workers:
+        description: 'Max concurrent workers'
+        default: '5'
+        required: false
 
 jobs:
   assess:
@@ -39,21 +47,29 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Run assessments (all konflux-ci public repos)
+      - name: Run assessments (all public repos in org)
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
-          python3 runner/assess.py \
-            --mode prod \
-            --workers 5 \
-            --retries 1
+          if [ -n "${{ inputs.org }}" ]; then
+            python3 runner/assess.py \
+              --org "${{ inputs.org }}" \
+              --workers "${{ inputs.workers || '5' }}" \
+              --retries 1
+          else
+            # Default: read org from repos.yaml
+            python3 runner/assess.py \
+              --org "$(python3 -c \"import yaml; print(yaml.safe_load(open('runner/repos.yaml'))['org'])\")" \
+              --workers "${{ inputs.workers || '5' }}" \
+              --retries 1
+          fi
 
       - name: Upload failed repos artifact (if any)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: failed-repos
-          path: runner/failed-repos.txt
+          path: runner/failed-repos.yaml
           if-no-files-found: ignore
 
       - name: Fail job if failures remain

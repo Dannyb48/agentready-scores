@@ -2,10 +2,11 @@
 """
 AgentReady concurrent assessment runner.
 
-Modes:
-  --mode demo   Read repos from runner/repos.yaml
-  --mode prod   Discover all public repos in the org via GitHub API
-  --from-file   Read repo names from a file (one per line, e.g. failed-repos.txt)
+Usage:
+  --org <org>           Discover and assess ALL public repos in the org via GitHub API
+  --from-file FILE      Assess repos listed in a YAML file (org + repos keys)
+                        Works with repos.yaml for curated runs, or failed-repos.yaml
+                        to re-run failures from a previous run.
 """
 import argparse
 import os
@@ -17,16 +18,25 @@ REPO_ROOT = SCRIPT_DIR.parent
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Run agentready assessments concurrently")
-    mode_group = parser.add_mutually_exclusive_group(required=True)
-    mode_group.add_argument(
-        "--mode", choices=["demo", "prod"],
-        help="demo: use repos.yaml; prod: discover all org repos via GitHub API"
+    parser = argparse.ArgumentParser(
+        description="Run agentready assessments concurrently",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__,
     )
-    mode_group.add_argument(
-        "--from-file", metavar="PATH",
-        help="Assess only repos listed in this file (one repo name per line)"
+
+    source_group = parser.add_mutually_exclusive_group(required=True)
+    source_group.add_argument(
+        "--org",
+        metavar="ORG",
+        help="GitHub org — discovers all public repos automatically",
     )
+    source_group.add_argument(
+        "--from-file",
+        metavar="PATH",
+        help="YAML file with 'org' and 'repos' keys — use repos.yaml for curated "
+             "runs or failed-repos.yaml to retry failures",
+    )
+
     parser.add_argument(
         "--workers", type=int, default=5,
         help="Max concurrent assessments (default: 5)"
@@ -37,11 +47,7 @@ def parse_args():
     )
     parser.add_argument(
         "--output-dir", type=Path, default=REPO_ROOT / "submissions",
-        help="Path to submissions directory (default: ../submissions)"
-    )
-    parser.add_argument(
-        "--org", default=None,
-        help="GitHub org to assess (overrides repos.yaml org in prod mode)"
+        help="Path to submissions directory (default: submissions/)"
     )
     return parser.parse_args()
 
@@ -51,22 +57,19 @@ def main():
 
     sys.path.insert(0, str(SCRIPT_DIR))
     from runner_lib import (
-        load_demo_repos,
-        discover_prod_repos,
         load_repos_from_file,
+        discover_org_repos,
         run_batch,
         commit_results,
         write_failed_repos,
     )
 
-    # Discover repos
+    # Resolve repo list
     if args.from_file:
         org, repos = load_repos_from_file(Path(args.from_file))
-    elif args.mode == "demo":
-        org, repos = load_demo_repos(SCRIPT_DIR / "repos.yaml")
-    else:  # prod
-        org = args.org or load_demo_repos(SCRIPT_DIR / "repos.yaml")[0]
-        repos = discover_prod_repos(org)
+    else:
+        org = args.org
+        repos = discover_org_repos(org)
 
     if not repos:
         print("No repos to assess. Exiting.")
@@ -74,7 +77,6 @@ def main():
 
     print(f"Assessing {len(repos)} repos in {org} with {args.workers} workers...")
 
-    # Run batch with retries
     succeeded, failed = run_batch(
         org=org,
         repos=repos,
@@ -83,20 +85,17 @@ def main():
         retries=args.retries,
     )
 
-    # Commit all results
     if succeeded:
         commit_results(REPO_ROOT, org, succeeded)
 
-    # Write failures
-    failed_file = SCRIPT_DIR / "failed-repos.txt"
+    failed_path = SCRIPT_DIR / "failed-repos.yaml"
     if failed:
-        write_failed_repos(failed_file, org, failed)
-        print(f"\n{len(failed)} repos failed. Written to {failed_file}")
-    elif failed_file.exists():
-        failed_file.unlink()  # Clean up stale failures file
+        write_failed_repos(failed_path, org, failed)
+        print(f"\n{len(failed)} repos failed. Written to {failed_path}")
+    elif failed_path.exists():
+        failed_path.unlink()
 
     print(f"\nDone: {len(succeeded)} succeeded, {len(failed)} failed")
-    sys.exit(1 if failed else 0)
 
 
 if __name__ == "__main__":

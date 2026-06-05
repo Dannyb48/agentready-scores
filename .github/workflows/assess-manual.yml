@@ -3,6 +3,13 @@ name: Assess repos (manual)
 on:
   workflow_dispatch:
     inputs:
+      from_file:
+        description: 'YAML file with repos to assess (e.g. runner/repos.yaml or runner/failed-repos.yaml). Leave blank to use --org.'
+        default: 'runner/repos.yaml'
+        required: false
+      org:
+        description: 'GitHub org — discovers ALL public repos. Overrides from_file if set.'
+        required: false
       workers:
         description: 'Max concurrent workers'
         default: '5'
@@ -10,9 +17,6 @@ on:
       retries:
         description: 'Retry attempts per failed repo'
         default: '1'
-        required: false
-      from_file:
-        description: 'Path to failed-repos.txt to re-run (leave blank for demo mode)'
         required: false
 
 jobs:
@@ -53,14 +57,14 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
-          if [ -n "${{ inputs.from_file }}" ]; then
+          if [ -n "${{ inputs.org }}" ]; then
             python3 runner/assess.py \
-              --from-file "${{ inputs.from_file }}" \
+              --org "${{ inputs.org }}" \
               --workers "${{ inputs.workers }}" \
               --retries "${{ inputs.retries }}"
           else
             python3 runner/assess.py \
-              --mode demo \
+              --from-file "${{ inputs.from_file }}" \
               --workers "${{ inputs.workers }}" \
               --retries "${{ inputs.retries }}"
           fi
@@ -70,5 +74,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: failed-repos
-          path: runner/failed-repos.txt
+          path: runner/failed-repos.yaml
           if-no-files-found: ignore
