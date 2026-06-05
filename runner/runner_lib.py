@@ -124,21 +124,27 @@ def assess_repo(org: str, repo: str, output_dir: Path) -> str:
             timeout=600,
         )
 
-        # Find the assessment JSON (assessment-YYYYMMDD-HHMMSS.json)
-        json_files = glob.glob(str(output_tmp / "assessment-*.json"))
+        # Find timestamped assessment JSONs only (exclude symlinks like assessment-latest.json)
+        all_json = glob.glob(str(output_tmp / "assessment-*.json"))
+        json_files = [f for f in all_json if not os.path.islink(f)]
+        if not json_files:
+            # Fall back to resolving symlinks if no plain files found
+            json_files = [str(Path(f).resolve()) for f in all_json if os.path.islink(f)]
         if not json_files:
             raise FileNotFoundError(
                 f"No assessment JSON found in agentready output for {repo}"
             )
 
-        # Take the most recent if multiple
+        # Take the most recent timestamped file
         json_files.sort()
         src_json = Path(json_files[-1])
+        # Always use the real filename (resolve symlinks)
+        src_json = src_json.resolve()
         dest_json = repo_submissions_dir / src_json.name
 
         shutil.copy2(src_json, dest_json)
 
-        # Create/update the assessment-latest.json symlink
+        # Create/update the assessment-latest.json symlink pointing to the timestamped file
         symlink = repo_submissions_dir / "assessment-latest.json"
         if symlink.exists() or symlink.is_symlink():
             symlink.unlink()
