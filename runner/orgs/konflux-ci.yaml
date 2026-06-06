@@ -6,6 +6,8 @@
 org: konflux-ci
 
 exclude:
+  - .fullsend
+  - .github
   - agent-plugins
   - application-api
   - architecture
