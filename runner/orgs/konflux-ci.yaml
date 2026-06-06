@@ -1,16 +1,101 @@
-# Replace with your GitHub org name
+# Assessment scope for the konflux-ci org.
+# Only repos tracked in a Secureflow - Konflux DevLake project
+# (excluding Pvsec and Global projects) will be assessed.
+# Repos in 'exclude' were found in upstream submissions but have no
+# corresponding DevLake project scope — generated 2026-06-05.
 org: konflux-ci
 
-# Repos to assess when using --from-file runner/repos.yaml
-repos:
-  - devlake
-  - build-service
-  - integration-service
-  - release-service
-  - mintmaker
-  - build-definitions
-
-# Repos to skip in all modes (--from-file and --org)
-# exclude:
-#   - archived-repo
-#   - broken-repo
+exclude:
+  - agent-plugins
+  - application-api
+  - architecture
+  - aws-cli-container
+  - bazel-builder
+  - brand-assets
+  - build-pipeline-tasks
+  - build-ta-pipeline-migration
+  - build-trusted-artifacts
+  - capo
+  - ci-terraform-runner
+  - cli
+  - community
+  - community-catalog
+  - coverage-dashboard
+  - crossplane-components
+  - curated-data
+  - deptriage
+  - dex
+  - diffused
+  - discussions
+  - docs
+  - e2e-tests
+  - git-clone
+  - go-builder
+  - image-rbac-proxy
+  - infra-deployments
+  - insights-chrome
+  - insights-chrome-rebrand
+  - integration-examples
+  - kait-task
+  - kargo
+  - kite
+  - ko-builder
+  - konflux-build-cli
+  - konflux-casc
+  - konflux-ci.github.io
+  - konflux-clamav
+  - konflux-lightspeed
+  - konflux-operator-trusted-sources
+  - konflux-sast-tasks
+  - konflux-test-tasks
+  - llm-compressor-container
+  - loadtest
+  - maven-lockfile
+  - mintmaker-schedule-calculator
+  - mobster
+  - multi-arch
+  - multi-arch-konflux-example
+  - multi-version-konflux-stage-sample
+  - namespace-generator
+  - olm-operator-konflux-sample
+  - operator-foundry
+  - paketo-container
+  - perfscale
+  - pipeline-samples
+  - planning
+  - pr-review-webhook
+  - prioritize
+  - pulp-tool
+  - queue-wg
+  - refresh-rpm-lockfiles
+  - regctl-container
+  - release-service-catalog-e2e-base
+  - release-service-monitor
+  - release-test
+  - remote-secret
+  - renovate-config-validator-action
+  - renovate-log-analyzer
+  - repository-validator
+  - reverse-proxy
+  - rpm-lockfile-prototype
+  - rpmbuild-pipeline
+  - rpmbuild-pipeline-environment-container
+  - rpmbuild-pipeline-monorepo-mock-config-test
+  - rpmbuild-pipeline-test-sources
+  - rust-builder
+  - sample-component-golang
+  - sample-component-golang-updater
+  - service-provider-integration-operator
+  - signing
+  - squid-exporter
+  - support
+  - task-repo-shared-ci
+  - task-runner
+  - tekton-tools
+  - tektor
+  - test-data-sast
+  - testrepo
+  - testrepo-updater
+  - workspace-manager
+  - yarn-builder
+  - zot
