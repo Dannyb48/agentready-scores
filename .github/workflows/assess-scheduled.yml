@@ -57,9 +57,9 @@ jobs:
               --workers "${{ inputs.workers || '5' }}" \
               --retries 1
           else
-            # Default: read org from repos.yaml
+            # Default: discover all repos for each org defined in runner/orgs/
             python3 runner/assess.py \
-              --org "$(python3 -c \"import yaml; print(yaml.safe_load(open('runner/repos.yaml'))['org'])\")" \
+              --from-file runner/orgs/*.yaml \
               --workers "${{ inputs.workers || '5' }}" \
               --retries 1
           fi

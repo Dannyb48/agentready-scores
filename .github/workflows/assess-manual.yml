@@ -4,8 +4,8 @@ on:
   workflow_dispatch:
     inputs:
       from_file:
-        description: 'YAML file with repos to assess (e.g. runner/repos.yaml or runner/failed-repos.yaml). Leave blank to use --org.'
-        default: 'runner/repos.yaml'
+        description: 'Space-separated YAML files to assess (e.g. runner/orgs/konflux-ci.yaml). Leave blank to use --org.'
+        default: 'runner/orgs/konflux-ci.yaml'
         required: false
       org:
         description: 'GitHub org — discovers ALL public repos. Overrides from_file if set.'

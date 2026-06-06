@@ -13,8 +13,10 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from runner_lib import (
+    SchemaError,
     commit_results,
     discover_org_repos,
+    load_exclusions,
     load_repos_from_file,
     run_batch,
     write_failed_repos,
@@ -56,19 +58,118 @@ def failed_repos_yaml(tmp_path):
 # ---------------------------------------------------------------------------
 
 class TestLoadReposFromFile:
-    def test_returns_org_and_repos(self, repos_yaml):
-        org, repos = load_repos_from_file(repos_yaml)
+    def test_returns_org_repos_and_exclusions(self, repos_yaml):
+        org, repos, exclusions = load_repos_from_file(repos_yaml)
         assert org == "my-org"
         assert repos == ["repo-a", "repo-b", "repo-c"]
+        assert exclusions == set()
 
     def test_parses_failed_repos_yaml(self, failed_repos_yaml):
-        org, repos = load_repos_from_file(failed_repos_yaml)
+        org, repos, exclusions = load_repos_from_file(failed_repos_yaml)
         assert org == "my-org"
         assert repos == ["repo-x", "repo-y"]
+
+    def test_exclude_filters_repos(self, tmp_path):
+        f = tmp_path / "repos.yaml"
+        f.write_text(textwrap.dedent("""\
+            org: my-org
+            repos:
+              - repo-a
+              - repo-b
+              - archived-repo
+            exclude:
+              - archived-repo
+        """))
+        org, repos, exclusions = load_repos_from_file(f)
+        assert "archived-repo" not in repos
+        assert repos == ["repo-a", "repo-b"]
+        assert "archived-repo" in exclusions
+
+    def test_no_repos_key_returns_empty_list_with_exclusions(self, tmp_path):
+        f = tmp_path / "repos.yaml"
+        f.write_text(textwrap.dedent("""\
+            org: my-org
+            exclude:
+              - bad-repo
+        """))
+        org, repos, exclusions = load_repos_from_file(f)
+        assert org == "my-org"
+        assert repos == []
+        assert exclusions == {"bad-repo"}
+
+    def test_exclude_key_absent_returns_empty_set(self, repos_yaml):
+        org, repos, exclusions = load_repos_from_file(repos_yaml)
+        assert exclusions == set()
 
     def test_missing_file_raises(self, tmp_path):
         with pytest.raises(FileNotFoundError):
             load_repos_from_file(tmp_path / "nonexistent.yaml")
+
+
+# ---------------------------------------------------------------------------
+# Schema validation
+# ---------------------------------------------------------------------------
+
+class TestSchemaValidation:
+    def _write(self, tmp_path, content):
+        f = tmp_path / "repos.yaml"
+        f.write_text(textwrap.dedent(content))
+        return f
+
+    def test_missing_org_raises(self, tmp_path):
+        f = self._write(tmp_path, "repos:\n  - repo-a\n")
+        with pytest.raises(SchemaError, match="'org' is required"):
+            load_repos_from_file(f)
+
+    def test_empty_org_raises(self, tmp_path):
+        f = self._write(tmp_path, "org:\nrepos:\n  - repo-a\n")
+        with pytest.raises(SchemaError, match="'org' is required"):
+            load_repos_from_file(f)
+
+    def test_org_non_string_raises(self, tmp_path):
+        f = self._write(tmp_path, "org: 123\n")
+        with pytest.raises(SchemaError, match="'org' must be a string"):
+            load_repos_from_file(f)
+
+    def test_repos_non_list_raises(self, tmp_path):
+        f = self._write(tmp_path, "org: my-org\nrepos: not-a-list\n")
+        with pytest.raises(SchemaError, match="'repos' must be a list"):
+            load_repos_from_file(f)
+
+    def test_repos_non_string_entries_raises(self, tmp_path):
+        f = self._write(tmp_path, "org: my-org\nrepos:\n  - 42\n  - repo-b\n")
+        with pytest.raises(SchemaError, match="'repos' entries must be strings"):
+            load_repos_from_file(f)
+
+    def test_exclude_non_list_raises(self, tmp_path):
+        f = self._write(tmp_path, "org: my-org\nexclude: bad\n")
+        with pytest.raises(SchemaError, match="'exclude' must be a list"):
+            load_repos_from_file(f)
+
+    def test_unknown_key_raises(self, tmp_path):
+        f = self._write(tmp_path, "org: my-org\nrepos: []\ntypo_key: oops\n")
+        with pytest.raises(SchemaError, match="unknown key"):
+            load_repos_from_file(f)
+
+    def test_top_level_non_mapping_raises(self, tmp_path):
+        f = self._write(tmp_path, "- just-a-list\n")
+        with pytest.raises(SchemaError, match="expected a YAML mapping"):
+            load_repos_from_file(f)
+
+    def test_valid_file_passes(self, tmp_path):
+        f = self._write(tmp_path, "org: my-org\nrepos:\n  - repo-a\nexclude:\n  - bad\n")
+        org, repos, exclusions = load_repos_from_file(f)
+        assert org == "my-org"
+
+
+class TestLoadExclusions:
+    def test_returns_exclude_set(self, tmp_path):
+        f = tmp_path / "repos.yaml"
+        f.write_text("org: my-org\nrepos: []\nexclude:\n  - bad-repo\n")
+        assert load_exclusions(f) == {"bad-repo"}
+
+    def test_returns_empty_set_when_absent(self, repos_yaml):
+        assert load_exclusions(repos_yaml) == set()
 
 
 # ---------------------------------------------------------------------------
@@ -129,11 +230,12 @@ class TestWriteFailedRepos:
         assert data["repos"] == ["repo-x", "repo-y"]
 
     def test_output_can_be_reloaded_by_runner(self, tmp_path):
-        out = tmp_path / "failed-repos.yaml"
+        out = tmp_path / "failed-my-org.yaml"
         write_failed_repos(out, "my-org", ["repo-x"])
-        org, repos = load_repos_from_file(out)
+        org, repos, exclusions = load_repos_from_file(out)
         assert org == "my-org"
         assert repos == ["repo-x"]
+        assert exclusions == set()
 
 
 # ---------------------------------------------------------------------------

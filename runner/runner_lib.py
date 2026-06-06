@@ -12,11 +12,104 @@ import requests
 import yaml
 
 
-def load_repos_from_yaml(path: Path) -> Tuple[str, List[str]]:
-    """Load org and repo list from a YAML file with 'org' and 'repos' keys."""
+class SchemaError(ValueError):
+    """Raised when a repos YAML file fails schema validation."""
+
+
+def _validate_repos_yaml(data: dict, path: Path) -> None:
+    """
+    Validate the structure of a repos YAML file.
+
+    Required keys:
+      org   — non-empty string
+
+    Optional keys:
+      repos   — list of strings (repo names)
+      exclude — list of strings (repo names to skip)
+
+    Raises SchemaError with a descriptive message on any violation.
+    """
+    errors = []
+
+    if not isinstance(data, dict):
+        raise SchemaError(f"{path}: expected a YAML mapping at the top level, got {type(data).__name__}")
+
+    # org
+    org = data.get("org")
+    if not org:
+        errors.append("'org' is required and must be a non-empty string")
+    elif not isinstance(org, str):
+        errors.append(f"'org' must be a string, got {type(org).__name__}")
+
+    # repos (optional)
+    repos = data.get("repos")
+    if repos is not None:
+        if not isinstance(repos, list):
+            errors.append(f"'repos' must be a list, got {type(repos).__name__}")
+        else:
+            bad = [r for r in repos if not isinstance(r, str)]
+            if bad:
+                errors.append(f"'repos' entries must be strings, got: {bad}")
+
+    # exclude (optional)
+    exclude = data.get("exclude")
+    if exclude is not None:
+        if not isinstance(exclude, list):
+            errors.append(f"'exclude' must be a list, got {type(exclude).__name__}")
+        else:
+            bad = [r for r in exclude if not isinstance(r, str)]
+            if bad:
+                errors.append(f"'exclude' entries must be strings, got: {bad}")
+
+    # unknown keys
+    known = {"org", "repos", "exclude"}
+    unknown = set(data.keys()) - known
+    if unknown:
+        errors.append(f"unknown key(s): {sorted(unknown)}")
+
+    if errors:
+        msg = f"{path}: schema validation failed:\n" + "\n".join(f"  - {e}" for e in errors)
+        raise SchemaError(msg)
+
+
+def load_repos_from_yaml(path: Path) -> Tuple[str, List[str], set]:
+    """
+    Load org, repo list, and exclusions from a YAML file.
+
+    Expected structure:
+        org: my-org
+        repos:          # optional — if absent, caller should use org discovery
+          - repo-a
+          - repo-b
+        exclude:        # optional — repos to skip in any mode
+          - archived-repo
+
+    Returns (org, repos, exclusions).
+    If 'repos' is absent, returns an empty list — caller decides whether to
+    discover repos from the org and apply the returned exclusions.
+
+    Raises SchemaError if the file structure is invalid.
+    """
     with open(path) as f:
         data = yaml.safe_load(f)
-    return data["org"], data["repos"]
+
+    _validate_repos_yaml(data, path)
+
+    org = data["org"]
+    repos = data.get("repos") or []
+    exclude = set(data.get("exclude") or [])
+
+    if exclude and repos:
+        repos = [r for r in repos if r not in exclude]
+
+    return org, repos, exclude
+
+
+def load_exclusions(path: Path) -> set:
+    """Return the exclude set from a YAML file, empty set if key absent."""
+    with open(path) as f:
+        data = yaml.safe_load(f)
+    return set(data.get("exclude", []))
 
 
 # Alias used by assess.py --from-file
